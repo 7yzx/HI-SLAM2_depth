@@ -760,6 +760,7 @@ renderCUDA(
 	const uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ dL_dpixels,
 	const float* __restrict__ dL_dpixel_depths,
+	const float* __restrict__ dL_dpixel_mdepths,
 	const float focal_x, 
 	const float focal_y,
 	float3* __restrict__ dL_dmean2D,
@@ -818,11 +819,14 @@ renderCUDA(
 	// Gaussian is known from each pixel from the forward.
 	uint32_t contributor = toDo;
 	const int last_contributor = inside ? n_contrib[pix_id] : 0;
+	// printf("pix_id %d: H[%d], W[%d]\n", pix_id, H, W);
+	const int max_contributor = inside ? n_contrib[pix_id + H*W] : 0;
 
 	float accum_rec[C] = { 0 };
 	float dL_dpixel[C];
 	float accum_t_rec = 0;
 	float dL_dpixel_t;
+	float dL_dpixel_mt;
 	float accum_alpha_rec = 0;
 	float dL_dalpha= 0;
 	
@@ -839,6 +843,7 @@ renderCUDA(
 			float pixel_accum_depth = accum_depth[pix_id];
 			dL_dalpha -= dL_dpixel_depth_w*pixel_accum_depth/ww;
 			dL_dpixel_t = dL_dpixel_depth_w / w_final/ ln;
+			dL_dpixel_mt = dL_dpixel_mdepths[pix_id] / ln;
 		}
 	}
 
@@ -950,7 +955,10 @@ renderCUDA(
 				last_t = t;
 				dL_dopa += (t - accum_t_rec) * dL_dpixel_t;
 				dL_dt = dpixel_t_dt * dL_dpixel_t;
-				
+
+				if (contributor == max_contributor-1) {
+					dL_dt += dL_dpixel_mt;
+				}
 				dL_dts_shared[tid] = skip ? 0.f : dL_dt;
 				dL_dray_planes_shared[tid].x = skip ? 0.f : dL_dt * d.x / focal_x;
 				dL_dray_planes_shared[tid].y = skip ? 0.f : dL_dt * d.y / focal_y;
@@ -1130,6 +1138,7 @@ void BACKWARD::render(
 	const uint32_t* n_contrib,
 	const float* dL_dpixels,
 	const float* dL_dpixel_depth,
+	const float* dL_dpixel_mdepth,
 	const float focal_x, 
 	const float focal_y,
 	float3* dL_dmean2D,
@@ -1143,7 +1152,7 @@ void BACKWARD::render(
         ranges, point_list, W, H, bg_color, view_points, means2D, conic_opacity, colors, \
         depths, ts, ray_planes, alphas, \
 		accum_depth, \
-        n_contrib, dL_dpixels, dL_dpixel_depth, \
+        n_contrib, dL_dpixels, dL_dpixel_depth, dL_dpixel_mdepth,\
         focal_x, focal_y, dL_dmean2D, dL_dconic2D, dL_dopacity, dL_dcolors, \
         dL_dts, dL_dray_planes);
 }

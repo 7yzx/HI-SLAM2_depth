@@ -360,6 +360,7 @@ renderCUDA(
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
 	float* __restrict__ out_depth,
+	float* __restrict__ out_mdepth,
 	float* __restrict__ accum_depth,
 	int * __restrict__ n_touched)
 {
@@ -397,9 +398,12 @@ renderCUDA(
 	float T = 1.0f;
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
+	uint32_t max_contributor = -1;
+
 	float C[CHANNELS] = { 0 };
 	float weight = 0;
 	float Depth = 0;
+	float mDepth = 0;
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -462,6 +466,9 @@ renderCUDA(
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += collected_feature[j + BLOCK_SIZE * ch] * aT;
+			
+
+			bool before_median = T > 0.5;
 
 			if constexpr (DEPTH)
 			{
@@ -470,6 +477,7 @@ renderCUDA(
 				float t = t_center + (ray_plane.x * d.x + ray_plane.y * d.y);
 				// float depth = t/ln;
 				Depth += t * aT;
+				if(before_median) mDepth = t;
 			}
 			
 			weight += aT;
@@ -479,6 +487,9 @@ renderCUDA(
 			if (test_T > 0.5f) {
 				atomicAdd(&(n_touched[collected_id[j]]), 1);
 			}
+			
+			if (before_median)
+				max_contributor = contributor;
 			// Keep track of last range entry to update this
 			// pixel.
 			last_contributor = contributor;
@@ -490,6 +501,8 @@ renderCUDA(
 	if (inside)
 	{
 		n_contrib[pix_id] = last_contributor;
+
+		n_contrib[pix_id+ H*W] = max_contributor;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; //1 - T;
@@ -506,6 +519,7 @@ renderCUDA(
 			{
 				out_depth[pix_id] = 0;
 			}
+			out_mdepth[pix_id] = mDepth / ln;
 		}
 	}
 }
@@ -528,13 +542,14 @@ void FORWARD::render(
 	const float* bg_color,
 	float* out_color,
 	float* out_depth,
+	float* out_mdepth,
 	float* accum_depth,
 	int* n_touched)
 {
 	renderCUDA<NUM_CHANNELS, true> <<<grid, block>>> ( \
 		ranges, point_list, W, H, view_points, means2D, colors, ts, ray_planes, \
-		conic_opacity, focal_x, focal_y, out_alpha, n_contrib, bg_color, out_color, \
-		out_depth, \
+		conic_opacity, focal_x, focal_y, out_alpha, n_contrib,bg_color, out_color, \
+		out_depth, out_mdepth, \
 		accum_depth, n_touched);
 }
 

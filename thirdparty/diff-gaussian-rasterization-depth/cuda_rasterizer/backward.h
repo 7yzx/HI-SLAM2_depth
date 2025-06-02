@@ -38,6 +38,7 @@ namespace BACKWARD
 		const uint32_t* n_contrib,
 		const float* dL_dpixels,
 		const float* dL_dpixel_depth,
+		const float* dL_dpixel_mdepth,
 		const float focal_x, 
 		const float focal_y,
 		float3* dL_dmean2D,

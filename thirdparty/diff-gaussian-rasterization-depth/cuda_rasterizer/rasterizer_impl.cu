@@ -180,7 +180,7 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char*& chunk, s
 {
 	ImageState img;
 	// obtain(chunk, img.accum_alpha, N * 4, 128);
-	obtain(chunk, img.n_contrib, N, 128);
+	obtain(chunk, img.n_contrib, N*2, 128);
 	obtain(chunk, img.ranges, N, 128);
 	obtain(chunk, img.accum_depth, N, 128);
 	return img;
@@ -224,6 +224,7 @@ int CudaRasterizer::Rasterizer::forward(
 	const float tan_fovx, float tan_fovy,
 	float* out_color,
 	float* out_depth,
+	float* out_mdepth,
 	float* out_alpha,
 	int* radii,
 	int* n_touched)
@@ -345,6 +346,7 @@ int CudaRasterizer::Rasterizer::forward(
 		background,
 		out_color,
 		out_depth,
+		out_mdepth,
 		imgState.accum_depth,
 		n_touched);
 
@@ -376,6 +378,7 @@ void CudaRasterizer::Rasterizer::backward(
 	char* img_buffer,
 	const float* dL_dpix,
 	const float* dL_dpix_depth,
+	const float* dL_dpix_mdepth,
 	float* dL_dmean2D,
 	float* dL_dconic,
 	float* dL_dopacity,
@@ -427,6 +430,7 @@ void CudaRasterizer::Rasterizer::backward(
 		imgState.n_contrib,
 		dL_dpix,
 		dL_dpix_depth,
+		dL_dpix_mdepth,
 		focal_x, focal_y,
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
